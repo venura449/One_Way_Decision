@@ -5,7 +5,7 @@ services:
   - type: web
     name: one-way-decision # <-- change to your service name on Render
     runtime: python
-    # Explicit multipart reinstall: ensures the wheel is present even when -r skips it.
-    buildCommand: python -m pip install --upgrade pip && python -m pip install -r requirements.txt && python -m pip install --upgrade --force-reinstall "python-multipart>=0.0.12"
+    healthCheckPath: /health
+    buildCommand: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
     # Prefer this script over raw uvicorn — avoids 127.0.0.1 dashboard defaults.
     startCommand: python render_serve.py

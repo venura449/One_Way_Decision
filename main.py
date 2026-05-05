@@ -1,10 +1,12 @@
 import os
+import threading
 from typing import Dict, Tuple
 
 import cv2
 import joblib
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from ultralytics import YOLO
 
 VEHICLE_CLASS_IDS = {2, 3, 5, 7}  # car, motorcycle, bus, truck (COCO)
@@ -43,7 +45,18 @@ app = FastAPI()
 
 MODEL = os.environ.get("YOLO_MODEL", "yolov8n.pt")
 CONF = float(os.environ.get("CONF", "0.25"))
-model = YOLO(MODEL)
+
+_yolo_lock = threading.Lock()
+_yolo_model: YOLO | None = None
+
+
+def _get_yolo_model() -> YOLO:
+    """Lazy init so the HTTP server can bind before weights load (important on Render)."""
+    global _yolo_model
+    with _yolo_lock:
+        if _yolo_model is None:
+            _yolo_model = YOLO(MODEL)
+        return _yolo_model
 
 CUSTOM_MODEL_DIR = os.environ.get("CUSTOM_MODEL_DIR", os.path.join("Model", "models"))
 WINNER_MODEL_PATH = os.environ.get(
@@ -190,6 +203,22 @@ def _predict_gate_seconds(counts: Dict[str, int]) -> float:
     return _gate_time_seconds(counts)
 
 
+@app.head("/")
+async def root_head():
+    """Minimal response for probes that send HEAD / (no JSON body needed)."""
+    return Response(status_code=200)
+
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "docs": "/docs", "health": "/health"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.post("/count_total")
 async def count_total(image: UploadFile = File(...)):
     data = await image.read()
@@ -200,7 +229,7 @@ async def count_total(image: UploadFile = File(...)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    counts, ms = _count_vehicles(model, bgr, conf=CONF)
+    counts, ms = _count_vehicles(_get_yolo_model(), bgr, conf=CONF)
     return {"total": counts["total"], "inference_ms": round(ms, 2)}
 
 
@@ -214,7 +243,7 @@ async def count_by_type(image: UploadFile = File(...)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    counts, ms = _count_vehicles(model, bgr, conf=CONF)
+    counts, ms = _count_vehicles(_get_yolo_model(), bgr, conf=CONF)
     return {**counts, "inference_ms": round(ms, 2)}
 
 
@@ -231,8 +260,9 @@ async def priority_decision(image_a: UploadFile = File(...), image_b: UploadFile
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    counts_a, ms_a = _count_vehicles(model, a_bgr, conf=CONF)
-    counts_b, ms_b = _count_vehicles(model, b_bgr, conf=CONF)
+    yolo = _get_yolo_model()
+    counts_a, ms_a = _count_vehicles(yolo, a_bgr, conf=CONF)
+    counts_b, ms_b = _count_vehicles(yolo, b_bgr, conf=CONF)
 
     winner = _predict_winner(counts_a, counts_b)
     winner_counts = counts_a if winner in {"A", "tie"} else counts_b
@@ -265,5 +295,5 @@ async def priority_decision(image_a: UploadFile = File(...), image_b: UploadFile
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False)
 
