@@ -7,5 +7,5 @@ services:
     runtime: python
     # Explicit multipart reinstall: ensures the wheel is present even when -r skips it.
     buildCommand: python -m pip install --upgrade pip && python -m pip install -r requirements.txt && python -m pip install --upgrade --force-reinstall "python-multipart>=0.0.12"
-    # Bind 0.0.0.0 (not 127.0.0.1) or Render reports "No open ports detected".
-    startCommand: python -m uvicorn main:app --host 0.0.0.0 --port $PORT
+    # Prefer this script over raw uvicorn — avoids 127.0.0.1 dashboard defaults.
+    startCommand: python render_serve.py
