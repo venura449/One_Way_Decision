@@ -1,0 +1,10 @@
+# Render Blueprint: https://render.com/docs/infrastructure-as-code
+# Set `name` to match your existing Web Service in the dashboard (so updates apply to it,
+# not a second service). If you only use the dashboard, copy buildCommand/startCommand there.
+services:
+  - type: web
+    name: one-way-decision # <-- change to your service name on Render
+    runtime: python
+    # repo root must contain requirements.txt (leave Root Directory empty in dashboard)
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
