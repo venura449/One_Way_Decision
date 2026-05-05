@@ -5,6 +5,7 @@ services:
   - type: web
     name: one-way-decision # <-- change to your service name on Render
     runtime: python
-    # repo root must contain requirements.txt (leave Root Directory empty in dashboard)
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    # Explicit multipart reinstall: ensures the wheel is present even when -r skips it.
+    buildCommand: python -m pip install --upgrade pip && python -m pip install -r requirements.txt && python -m pip install --upgrade --force-reinstall "python-multipart>=0.0.12"
+    # Bind 0.0.0.0 (not 127.0.0.1) or Render reports "No open ports detected".
+    startCommand: python -m uvicorn main:app --host 0.0.0.0 --port $PORT
